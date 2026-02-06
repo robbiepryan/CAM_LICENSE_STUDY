@@ -10,7 +10,8 @@ A comprehensive study system for the **Florida Community Association Manager (CA
 | **[PRACTICE_EXAM.md](PRACTICE_EXAM.md)** | 100-question practice exam organized by domain with answers and scoring rubric |
 | **[FLASHCARDS_QUICK_REVIEW.md](FLASHCARDS_QUICK_REVIEW.md)** | Printable flashcard-style quick reference for last-minute review |
 | **[SMS_STUDY_PROGRAM.md](SMS_STUDY_PROGRAM.md)** | 30-day SMS drip study program with spaced repetition built in (3 questions/day) |
-| **[sms_schedule.json](sms_schedule.json)** | Machine-readable JSON of the SMS program for automation (Twilio, n8n, etc.) |
+| **[sms_schedule.json](sms_schedule.json)** | Machine-readable JSON of the SMS program for automation (Bird.com, n8n, etc.) |
+| **[N8N_WORKFLOW_SETUP.md](N8N_WORKFLOW_SETUP.md)** | Step-by-step guide to deploy the SMS program via n8n + Bird.com |
 
 ## Exam Domains Covered
 

@@ -1,7 +1,7 @@
-# n8n SMS Study Program — Setup Guide
+# n8n SMS Study Program — Setup Guide (Bird.com / MessageBird)
 
 > **Two workflows have already been created on your n8n instance at `https://dev.rrwo.us`.**  
-> This guide walks you through configuring them to go live.
+> This guide walks you through configuring them to go live using **Bird.com** (formerly MessageBird) as the SMS provider.
 
 ---
 
@@ -17,7 +17,7 @@
 │                                                 ▼            │
 │                                          Load Question ──►  │
 │                                          Question Found? ──►│
-│                                          Send SMS (Twilio)──►│
+│                                          Send SMS (Bird) ──►│
 │                                          Store Answer        │
 └──────────────────────────────────────────────────────────────┘
                           │
@@ -28,8 +28,8 @@
 │                  WORKFLOW 2: Reply Handler                    │
 │                  ID: XbBybhVWkCutoj68                        │
 │                                                              │
-│  Twilio Trigger ──► Load Pending Answer ──► Send Answer SMS │
-│  (incoming SMS)     (from static data)      (via Twilio)    │
+│  Webhook (POST) ──► Load Pending Answer ──► Send Answer SMS │
+│  (Bird inbound)     (from static data)      (via Bird)      │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -37,61 +37,62 @@
 1. **3x per day** (8am, 12:30pm, 6pm ET), Workflow 1 fires
 2. It calculates which **day** of the 30-day program it is and which **time slot** (morning/midday/evening)
 3. It looks up the matching question from `sms_schedule.json`
-4. It **sends the question** via Twilio SMS
+4. It **sends the question** via Bird.com (MessageBird) SMS
 5. It **stores the correct answer** in n8n's persistent static data
-6. When the student **replies with ANY text** (their guess), Workflow 2 fires
-7. Workflow 2 **retrieves the stored answer** and **sends it back** via SMS
+6. When the student **replies with ANY text** (their guess), Bird.com forwards the SMS to n8n's webhook, triggering Workflow 2
+7. Workflow 2 **retrieves the stored answer** and **sends it back** via Bird.com SMS
 
 ---
 
 ## Prerequisites
 
-### 1. Twilio Account (Required)
-You need a Twilio account with an SMS-capable phone number.
+### 1. Bird.com Account (Required)
+You need a Bird.com account with an SMS-capable number or sender ID.
 
-1. **Sign up** at [twilio.com](https://www.twilio.com/) (free trial gives you $15 credit)
-2. **Get a phone number** — Go to Console → Phone Numbers → Buy a Number (pick one with SMS capability)
-3. **Note these values:**
-   - **Account SID** (found on dashboard)
-   - **Auth Token** (found on dashboard)
-   - **Twilio Phone Number** (the number you bought, e.g., `+1234567890`)
+1. **Sign up** at [bird.com](https://www.bird.com/) (formerly MessageBird — free trial credit available)
+2. **Get a phone number** — Go to **Numbers** in the Bird dashboard and purchase a virtual number with SMS capability
+3. **Get your API key** — Go to **Developers → API access** and create a REST API key
+4. **Note these values:**
+   - **API Key** (starts with `live_` for production or `test_` for sandbox)
+   - **Bird Phone Number / Originator** (the number or alphanumeric sender ID, e.g., `+1234567890`)
 
-### 2. Configure Twilio Webhook for Incoming SMS
-This is how Twilio tells n8n when someone replies.
+### 2. Configure Bird.com Webhook for Incoming SMS
+This is how Bird tells n8n when someone replies.
 
-1. Go to **Twilio Console → Phone Numbers → Manage → Active Numbers**
-2. Click your phone number
-3. Scroll to **Messaging Configuration**
-4. Under **"A message comes in"**, set:
-   - **Webhook URL:** `https://dev.rrwo.us/webhook/cam-sms-reply` *(this will be the Twilio Trigger URL from Workflow 2)*
-   - **HTTP Method:** `POST`
-5. **Save**
+1. Go to **Bird Dashboard → Flow Builder** or **Developers → Webhooks**
+2. Create a new webhook / flow for **Inbound SMS messages**
+3. Set the **Webhook URL** to:
+   ```
+   https://dev.rrwo.us/webhook/cam-sms-reply
+   ```
+4. Set **HTTP Method** to `POST`
+5. **Save and activate**
 
-> ⚠️ **Note:** The exact webhook URL will be generated when you activate Workflow 2. Check the Twilio Trigger node in n8n to get the production URL, then paste it into Twilio.
+> ⚠️ **Note:** The webhook path `cam-sms-reply` is already configured in Workflow 2's Webhook node. When you activate the workflow in n8n, the URL becomes live. The production URL is:  
+> `https://dev.rrwo.us/webhook/cam-sms-reply`
 
 ### 3. n8n Credentials Setup
 
 In your n8n instance (`https://dev.rrwo.us`):
 
 1. Go to **Settings → Credentials → Add Credential**
-2. Search for **"Twilio"**
+2. Search for **"MessageBird"**
 3. Enter:
-   - **Account SID:** Your Twilio Account SID
-   - **Auth Token:** Your Twilio Auth Token
+   - **API Key:** Your Bird.com REST API key
 4. **Save**
 
 ### 4. Environment Variables
 
-Set these in your n8n environment (or use the Set node to hardcode them):
+Set these in your n8n environment (or hardcode them directly in the nodes):
 
 | Variable | Value | Example |
 |----------|-------|---------|
-| `TWILIO_PHONE_NUMBER` | Your Twilio number | `+1234567890` |
+| `BIRD_PHONE_NUMBER` | Your Bird.com number / originator | `+1234567890` |
 | `STUDENT_PHONE_NUMBER` | The student's phone number | `+1987654321` |
 
 **To set environment variables in n8n:**
 - If self-hosted: Add to your `.env` file or Docker environment
-- Alternative: Replace `$env.TWILIO_PHONE_NUMBER` and `$env.STUDENT_PHONE_NUMBER` in the Twilio nodes with hardcoded values
+- Alternative: Replace `$env.BIRD_PHONE_NUMBER` and `$env.STUDENT_PHONE_NUMBER` in the MessageBird nodes with hardcoded values
 
 ---
 
@@ -152,76 +153,63 @@ return [{ json: { ...match, found: true } }];
 2. Change `const START_DATE = '2026-02-10';` to your actual start date
 3. The program runs for 30 days from this date
 
-### Step 3: Configure Twilio Nodes
+### Step 3: Configure MessageBird (Bird.com) Nodes
 
-In **both workflows**, click each Twilio node and:
-1. Select your **Twilio credential** (created in Prerequisites step 3)
-2. Verify the `from` and `to` phone numbers are correct
+In **both workflows**, click each **MessageBird** node and:
+1. Select your **MessageBird credential** (created in Prerequisites step 3)
+2. Verify the **From** (originator) and **To** (recipients) phone numbers are correct
 3. If not using environment variables, hardcode the numbers directly
 
-### Step 4: Share State Between Workflows
+### Step 4: Verify the Webhook Path
+
+Workflow 2 uses a **Webhook** node (not a provider-specific trigger) to receive incoming SMS from Bird.com.
+
+1. Open Workflow 2 (`CAM Study - SMS Reply Handler`)
+2. Click the **"Bird Incoming SMS"** webhook node
+3. Confirm the path is `cam-sms-reply`
+4. The full production URL will be: `https://dev.rrwo.us/webhook/cam-sms-reply`
+5. This is the URL you entered in Bird.com's webhook configuration (Prerequisites step 2)
+
+### Step 5: Adjust Incoming SMS Field Mapping (If Needed)
+
+The **"Load Pending Answer"** code node in Workflow 2 parses the incoming SMS payload from Bird.com. Bird's webhook payload format may vary depending on your configuration. The node currently handles multiple common field names:
+
+```javascript
+// These lines handle various Bird.com payload formats:
+const incomingMessage = body.body || body.message?.text || body.text || body.Body || 'no message';
+const fromNumber = body.originator || body.message?.from || body.from || body.From || body.sender || '';
+```
+
+**To verify the exact field names:**
+1. Activate Workflow 2
+2. Send a test SMS to your Bird number
+3. Check the webhook node's output in n8n to see the exact JSON payload
+4. Adjust the field names in the code node if needed
+
+### Step 6: Share State Between Workflows
 
 The two workflows need to share the "pending answer" data. The simplest approach:
 
-**Recommended: Use a shared webhook approach**
+**Recommended: Merge into one workflow** (see "Single Workflow Option" below).
 
-Add an HTTP Request node at the end of Workflow 1 that calls a webhook on Workflow 2 to pass the answer data. Or use the approach already built in — both workflows use `$getWorkflowStaticData('global')`.
-
-**Since static data is per-workflow**, the cleanest solution is to modify Workflow 2's "Load Pending Answer" node to call the n8n API to read Workflow 1's static data:
+If keeping two workflows, add an **HTTP Request** node at the end of Workflow 1 that POSTs the answer data to Workflow 2's webhook. Or use the n8n API approach:
 
 ```javascript
-// In the Reply Handler's "Load Pending Answer" node:
-const incomingMessage = $input.first().json.Body || $input.first().json.body || '';
-const fromNumber = $input.first().json.From || $input.first().json.from || '';
-
-// Read the Sender workflow's execution data via n8n API
-const SENDER_WORKFLOW_ID = 'k4eXoRCzRowBDPpu';
-
-// Use n8n's internal API to get the latest execution
+// In the Reply Handler's "Load Pending Answer" node, read Sender's data via API:
 const executions = await this.helpers.httpRequest({
   method: 'GET',
-  url: `${$env.N8N_API_URL || 'https://dev.rrwo.us'}/api/v1/executions?workflowId=${SENDER_WORKFLOW_ID}&status=success&limit=1`,
-  headers: {
-    'X-N8N-API-KEY': $env.N8N_API_KEY || 'YOUR_API_KEY_HERE'
-  },
+  url: `https://dev.rrwo.us/api/v1/executions?workflowId=k4eXoRCzRowBDPpu&status=success&limit=1`,
+  headers: { 'X-N8N-API-KEY': $env.N8N_API_KEY || 'YOUR_API_KEY_HERE' },
   json: true
 });
-
-// Alternative simpler approach: Store answer in a file or use a Set node
-// For now, use this workflow's own static data (populated by a webhook from Workflow 1)
-const staticData = $getWorkflowStaticData('global');
-
-const pendingAnswer = staticData.pendingAnswer || null;
-const alreadyAnswered = staticData.answered || false;
-
-if (!pendingAnswer || alreadyAnswered) {
-  return [{ json: {
-    hasAnswer: false,
-    reply: alreadyAnswered 
-      ? "You already answered this one! Next question coming soon. 📚"
-      : "No pending question. Next question coming at the scheduled time! 📱",
-    fromNumber: fromNumber
-  }}];
-}
-
-staticData.answered = true;
-
-return [{ json: {
-  hasAnswer: true,
-  answer: pendingAnswer,
-  fromNumber: fromNumber,
-  studentAnswer: incomingMessage
-}}];
 ```
 
-**SIMPLEST ALTERNATIVE: Merge into one workflow** (see "Single Workflow Option" below).
-
-### Step 5: Activate Both Workflows
+### Step 7: Activate Both Workflows
 
 1. Open each workflow in n8n
 2. Toggle the **Active** switch to ON
 3. Workflow 1 will start firing at 8am, 12:30pm, and 6pm ET
-4. Workflow 2 will listen for incoming SMS replies 24/7
+4. Workflow 2 will listen for incoming SMS replies 24/7 via the webhook
 
 ---
 
@@ -230,15 +218,15 @@ return [{ json: {
 Instead of two separate workflows, you can combine everything into **one workflow** with two trigger paths. This eliminates the shared-state problem entirely:
 
 ```
-Path 1: Schedule Trigger → Calculate Day/Slot → Load Question → Send SMS → Store Answer (static data)
-Path 2: Twilio Trigger → Load Answer (same static data) → Send Answer SMS
+Path 1: Schedule Trigger → Calculate Day/Slot → Load Question → Send SMS (Bird) → Store Answer (static data)
+Path 2: Webhook (Bird inbound) → Load Answer (same static data) → Send Answer SMS (Bird)
 ```
 
 **To do this:**
-1. Create a new workflow with BOTH a Schedule Trigger AND a Twilio Trigger
+1. Create a new workflow with BOTH a Schedule Trigger AND a Webhook node
 2. Each trigger feeds its own chain of nodes
 3. Both chains use `$getWorkflowStaticData('global')` — since they're in the SAME workflow, they share the same static data automatically
-4. No API calls or webhooks needed between workflows
+4. No API calls or cross-workflow webhooks needed
 
 This is the **recommended approach** and eliminates all cross-workflow complexity.
 
@@ -252,18 +240,26 @@ This is the **recommended approach** and eliminates all cross-workflow complexit
 3. Check each node's output:
    - `Calculate Day & Slot` should show the current day number and slot
    - `Load Question Data` should find the matching question
-   - `Send Question SMS` should send the SMS (check your phone!)
+   - `Send Question SMS` should send the SMS via Bird.com (check your phone!)
 
 ### Test Workflow 2 (Reply Handler)
 1. Make sure Workflow 2 is **active**
-2. Send a text message to your Twilio number (any text, like "B")
+2. Send a text message to your Bird.com number (any text, like "B")
 3. You should receive the answer back within seconds
 
 ### Dry Run (No SMS)
 To test without sending actual SMS:
-1. Disable the Twilio nodes temporarily
+1. Disable the MessageBird nodes temporarily
 2. Run the workflow manually
 3. Check the output of each node to verify the logic
+
+### Test the Webhook Manually
+You can also test the webhook with curl:
+```bash
+curl -X POST https://dev.rrwo.us/webhook-test/cam-sms-reply \
+  -H "Content-Type: application/json" \
+  -d '{"originator": "+1987654321", "body": "B"}'
+```
 
 ---
 
@@ -278,9 +274,9 @@ Edit the **Schedule Trigger** node's cron expression:
 ### Add Multiple Students
 Modify the **Send Question SMS** node to loop over an array of phone numbers:
 ```javascript
-// In a Code node before Twilio:
+// In a Code node before MessageBird:
 const students = ['+1111111111', '+2222222222', '+3333333333'];
-return students.map(phone => ({ json: { ...items[0].json, to: phone } }));
+return students.map(phone => ({ json: { ...items[0].json, recipients: phone } }));
 ```
 
 ### Track Progress
@@ -306,21 +302,22 @@ const scoreMsg = isCorrect
 
 ## Cost Estimate
 
-### Twilio SMS Costs
-- **Outbound SMS:** ~$0.0079/message (US)
-- **Inbound SMS:** ~$0.0075/message (US)
-- **Phone number:** ~$1.15/month
+### Bird.com (MessageBird) SMS Costs
+- **Outbound SMS (US):** ~€0.0070/message (~$0.0076)
+- **Inbound SMS (US):** ~€0.0060/message (~$0.0065)
+- **Virtual Number (US):** ~€1.00/month (~$1.09)
+- Pricing varies by country — check [bird.com/pricing](https://www.bird.com/pricing)
 
 ### 30-Day Program Cost
 | Item | Count | Cost |
 |------|-------|------|
-| Outbound questions | 90 | $0.71 |
-| Outbound answers | 90 | $0.71 |
-| Inbound replies | 90 | $0.68 |
-| Phone number | 1 month | $1.15 |
-| **Total** | | **~$3.25** |
+| Outbound questions | 90 | ~$0.68 |
+| Outbound answers | 90 | ~$0.68 |
+| Inbound replies | 90 | ~$0.59 |
+| Virtual number | 1 month | ~$1.09 |
+| **Total** | | **~$3.04** |
 
-> The entire 30-day automated study program costs about **$3.25** in Twilio fees.
+> The entire 30-day automated study program costs about **$3** in Bird.com fees.
 
 ---
 
@@ -328,9 +325,10 @@ const scoreMsg = isCorrect
 
 | Issue | Solution |
 |-------|---------|
-| No SMS received | Check Twilio credentials, phone number format (must include +1), and account balance |
+| No SMS received | Check MessageBird credentials (API key), phone number format (must include country code like +1), and account balance |
 | Wrong question sent | Verify `START_DATE` in Calculate Day & Slot node matches your actual start date |
-| Reply doesn't trigger answer | Check Twilio webhook URL points to your n8n Twilio Trigger URL. Must be the production URL, not test. |
+| Reply doesn't trigger answer | Check that Bird.com's inbound webhook URL points to `https://dev.rrwo.us/webhook/cam-sms-reply`. Workflow 2 must be **Active**. |
+| Webhook receives data but wrong fields | Activate Workflow 2, send a test SMS, check the webhook node output, and adjust field names in "Load Pending Answer" code node |
 | "No pending question" reply | The sender workflow hasn't run yet today, or the answer was already sent. Check execution logs. |
 | Schedule not firing | Make sure the workflow is **Active** (toggled ON). Check timezone setting. |
 | Static data not persisting | Ensure n8n is configured with persistent storage (not ephemeral). Check your n8n hosting setup. |
